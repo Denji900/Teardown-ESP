@@ -11,6 +11,7 @@ External DirectX 11 overlay for Teardown that reads player and camera data from 
 > Using this overlay may violate the game's Terms of Service and may result in account bans or other penalties. The author assumes no responsibility for any misuse.
 
 ---
+This doesn't work properly in Prop Hunt yet but it's good for Deathmatch FPS game modes.
 
 ## Features
 
