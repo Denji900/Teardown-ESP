@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -24,18 +25,18 @@
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-constexpr uintptr_t OFFSET_SCENE_MANAGER = 0x50;
-constexpr uintptr_t OFFSET_CAMERA_MANAGER = 0x60;
-constexpr uintptr_t OFFSET_CAM_POS = 0x1CC;
-constexpr uintptr_t OFFSET_CAM_ROT = 0x1D8;
+uintptr_t OFFSET_SCENE_MANAGER = 0x50;
+uintptr_t OFFSET_CAMERA_MANAGER = 0x60;
+uintptr_t OFFSET_CAM_POS = 0x1D0;
+uintptr_t OFFSET_CAM_ROT = 0x1DC;
 
-constexpr uintptr_t OFFSET_GLOBAL_FOV = 0x380;
-constexpr uintptr_t OFFSET_GLOBAL_FOV_ALT = 0x320;
+uintptr_t OFFSET_GLOBAL_FOV = 0x380;
+uintptr_t OFFSET_GLOBAL_FOV_ALT = 0x320;
 
-constexpr uintptr_t OFFSET_PLAYER_COUNT = 0xB8;
-constexpr uintptr_t OFFSET_PLAYER_SLOT_ARRAY = 0xC0;
-constexpr uintptr_t OFFSET_LOCAL_SLOT_INDEX = 0x168;
-constexpr uintptr_t OFFSET_PLAYER_POS = 0x570;
+uintptr_t OFFSET_PLAYER_COUNT = 0xB8;
+uintptr_t OFFSET_PLAYER_SLOT_ARRAY = 0xC0;
+uintptr_t OFFSET_LOCAL_SLOT_INDEX = 0x168;
+uintptr_t OFFSET_PLAYER_POS = 0x570;
 
 struct Vec2 {
     float x, y;
@@ -73,11 +74,9 @@ struct SharedData {
 std::atomic<bool> g_workerRunning{ true };
 
 inline float HorizontalToVerticalFov(float hFovDeg, float aspect) {
-    constexpr float DEG2RAD = 3.1415926535f / 180.0f;
-    constexpr float RAD2DEG = 180.0f / 3.1415926535f;
-    float hFovRad = hFovDeg * DEG2RAD;
+    float hFovRad = hFovDeg * (3.1415926535f / 180.0f);
     float vFovRad = 2.0f * std::atan(std::tan(hFovRad / 2.0f) / aspect);
-    return vFovRad * RAD2DEG;
+    return vFovRad * (180.0f / 3.1415926535f);
 }
 
 inline Vec3 RotateVectorByQuat(const Vec3& v, const Vec4& q) {
@@ -121,6 +120,64 @@ inline bool WorldToScreen(const Vec3& worldPos, const Vec3& camPos, const Vec4& 
 
     return true;
 }
+
+class PatternScanner {
+public:
+    std::vector<BYTE> buffer;
+    uintptr_t baseAddress = 0;
+
+    bool Init(HANDLE hProcess, uintptr_t moduleBase, size_t moduleSize) {
+        baseAddress = moduleBase;
+        buffer.resize(moduleSize);
+        SIZE_T bytesRead = 0;
+        return ReadProcessMemory(hProcess, (LPCVOID)moduleBase, buffer.data(), moduleSize, &bytesRead) && bytesRead > 0;
+    }
+
+    uintptr_t FindPattern(const char* szSignature, uintptr_t startOffset = 0, size_t maxDistance = 0) {
+        std::vector<int> patternBytes;
+        char* start = const_cast<char*>(szSignature);
+        char* end = start + strlen(szSignature);
+        for (char* current = start; current < end; ++current) {
+            if (*current == '?') {
+                ++current;
+                if (*current == '?') ++current;
+                patternBytes.push_back(-1);
+            }
+            else if (*current != ' ') {
+                patternBytes.push_back(strtol(current, &current, 16));
+            }
+        }
+
+        size_t s = patternBytes.size();
+        int* d = patternBytes.data();
+        size_t searchEnd = maxDistance > 0 ? (startOffset + maxDistance) : (buffer.size() - s);
+        if (searchEnd > buffer.size() - s) searchEnd = buffer.size() - s;
+
+        for (size_t i = startOffset; i < searchEnd; ++i) {
+            bool found = true;
+            for (size_t j = 0; j < s; ++j) {
+                if (buffer[i + j] != d[j] && d[j] != -1) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) return i;
+        }
+        return 0;
+    }
+
+    int32_t ReadInt32(uintptr_t offset) {
+        if (offset + 4 > buffer.size()) return 0;
+        int32_t val = 0;
+        std::memcpy(&val, &buffer[offset], sizeof(int32_t));
+        return val;
+    }
+
+    uint8_t ReadByte(uintptr_t offset) {
+        if (offset + 1 > buffer.size()) return 0;
+        return buffer[offset];
+    }
+};
 
 void MemoryWorkerThread() {
     HANDLE hProcess = nullptr;
@@ -180,29 +237,50 @@ void MemoryWorkerThread() {
                 }
 
                 if (moduleBase && moduleSize) {
-                    std::vector<BYTE> memory(moduleSize);
-                    SIZE_T bytesRead = 0;
-                    if (ReadProcessMemory(hProcess, (LPCVOID)moduleBase, memory.data(), moduleSize, &bytesRead)) {
-                        constexpr BYTE pattern[] = { 0x48, 0x8B, 0x05, 0x00, 0x00, 0x00, 0x00, 0x48, 0x8B, 0x58, 0x60 };
-                        constexpr char mask[] = "xxx????xxxx";
-                        constexpr size_t patternSize = sizeof(pattern);
-                        constexpr size_t maskSize = sizeof(mask) - 1;
-
-                        for (size_t i = 0; i + patternSize <= bytesRead; ++i) {
-                            bool found = true;
-                            for (size_t j = 0; j < maskSize; ++j) {
-                                if (mask[j] != '?' && memory[i + j] != pattern[j]) {
-                                    found = false;
-                                    break;
-                                }
-                            }
-                            if (found) {
-                                uintptr_t insAddr = moduleBase + i;
-                                int32_t relOffset = 0;
-                                std::memcpy(&relOffset, &memory[i + 3], sizeof(relOffset));
-                                uintptr_t gCtxPtr = insAddr + 7 + relOffset;
+                    PatternScanner scanner;
+                    if (scanner.Init(hProcess, moduleBase, moduleSize)) {
+                        uintptr_t getCamFn = scanner.FindPattern("48 89 5C 24 08 57 48 83 EC 40 49 8B F8 49");
+                        if (getCamFn) {
+                            uintptr_t globalCtxInst = scanner.FindPattern("48 8B 05 ? ? ? ?", getCamFn, 0x100);
+                            if (globalCtxInst) {
+                                int32_t relOffset = scanner.ReadInt32(globalCtxInst + 3);
+                                uintptr_t gCtxPtr = moduleBase + globalCtxInst + 7 + relOffset;
                                 ReadProcessMemory(hProcess, (LPCVOID)gCtxPtr, &globalContext, sizeof(uintptr_t), nullptr);
-                                break;
+                            }
+
+                            uintptr_t camMgrInst = scanner.FindPattern("48 8B 58 ?", getCamFn, 0x100);
+                            if (camMgrInst) OFFSET_CAMERA_MANAGER = scanner.ReadByte(camMgrInst + 3);
+
+                            uintptr_t camPosInst = scanner.FindPattern("4C 8D 83 ? ? 00 00", getCamFn, 0x150);
+                            if (camPosInst) OFFSET_CAM_POS = scanner.ReadInt32(camPosInst + 3);
+
+                            uintptr_t camRotInst = scanner.FindPattern("4C 8D 83 ? ? 00 00", camPosInst + 7, 0x150);
+                            if (camRotInst) OFFSET_CAM_ROT = scanner.ReadInt32(camRotInst + 3);
+                        }
+
+                        uintptr_t locSlotFn = scanner.FindPattern("48 8B 05 ? ? ? ? 48 63 88 ? ? ? ? 85");
+                        if (locSlotFn) {
+                            OFFSET_LOCAL_SLOT_INDEX = scanner.ReadInt32(locSlotFn + 10);
+                        }
+
+                        uintptr_t pCountFn = scanner.FindPattern("40 57 41 56 41 57 48 83 EC 20 45");
+                        if (pCountFn) {
+                            uintptr_t pArrayInst = scanner.FindPattern("48 8B 98 ? ? 00 00", pCountFn, 0x150);
+                            if (pArrayInst) OFFSET_PLAYER_SLOT_ARRAY = scanner.ReadInt32(pArrayInst + 3);
+
+                            uintptr_t pCountInst = scanner.FindPattern("48 63 80 ? ? 00 00", pCountFn, 0x150);
+                            if (pCountInst) OFFSET_PLAYER_COUNT = scanner.ReadInt32(pCountInst + 3);
+                        }
+
+                        uintptr_t pPosFn = scanner.FindPattern("48 89 5C 24 08 57 48 83 EC 40 48 8B C2 48 C7");
+                        if (pPosFn) {
+                            uintptr_t vecInst = scanner.FindPattern("F2 0F 10 80 ? ? 00 00", pPosFn, 0x150);
+                            if (vecInst) {
+                                OFFSET_PLAYER_POS = scanner.ReadInt32(vecInst + 4);
+                            }
+                            else {
+                                vecInst = scanner.FindPattern("4C 8D 80 ? ? 00 00", pPosFn, 0x150);
+                                if (vecInst) OFFSET_PLAYER_POS = scanner.ReadInt32(vecInst + 3);
                             }
                         }
                     }
