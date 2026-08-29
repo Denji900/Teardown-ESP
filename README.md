@@ -14,7 +14,7 @@ External DirectX 11 overlay for Teardown that reads player and camera data from 
 This doesn't work properly in Prop Hunt yet but it's good for Deathmatch FPS game modes.
 
 ## Features
-
+- Made for Multiplayer!
 - External process attachment to `Teardown.exe`
 - Automatically dumped offsets (most likely won't break every update)
 - DirectX 11 transparent overlay window
