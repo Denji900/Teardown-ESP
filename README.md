@@ -16,6 +16,7 @@ This doesn't work properly in Prop Hunt yet but it's good for Deathmatch FPS gam
 ## Features
 
 - External process attachment to `Teardown.exe`
+- Automatically dumped offsets (most likely won't break every update)
 - DirectX 11 transparent overlay window
 - 3D bounding box ESP for players
 - Tracer lines from screen bottom to players
