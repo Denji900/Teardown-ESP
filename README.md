@@ -1,8 +1,8 @@
-# Teardown ESP Overlay
+# DENJI900's Teardown Cheat Menu
 
 ![Preview](docs/images/Screenshot-1.png)
 
-External DirectX 11 overlay for Teardown that reads player and camera data from memory and draws ESP information.
+External DirectX 11 overlay for Teardown that reads player and camera data from memory that draws ESP information and writes camera information for aimbot.
 
 > **Educational Use Only**
 >
@@ -18,13 +18,10 @@ This doesn't work properly in Prop Hunt yet but it's good for Deathmatch FPS gam
 - External process attachment to `Teardown.exe`
 - Automatically dumped offsets (most likely won't break every update)
 - DirectX 11 transparent overlay window
-- 3D bounding box ESP for players
-- Tracer lines from screen bottom to players
-- Live player table with:
-  - Player name
-  - X, Y, Z position
-  - Distance from local camera
-- Camera position display
+- Box ESP
+- Skeleton ESP
+- Tracers
+- Aimbot
 - `INSERT` key to show/hide overlay menu
 
 ---
@@ -53,8 +50,10 @@ Open the project and CTRL + SHIFT + B in **Release x64** mode.
 ## Usage
 
 1. Launch Teardown.
-2. Run the compiled ESP executable.
+2. Run the compiled executable.
 3. Press `INSERT` to show or hide the menu.
 4. Use the menu to enable or disable:
-   - 3D bounding box outline
+   - Box ESP
+   - Skeleton ESP
+   - Aimbot
    - Tracers
