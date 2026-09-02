@@ -258,8 +258,7 @@ inline float NormalizeAngle(float target, float current) {
 }
 
 void DrawSkeleton(ImDrawList* drawList, const PlayerInfo& player, const Vec3& camPos, const Vec4& camRot, float screenW, float screenH, float activeFov) {
-    ImU32 boneCol = player.isLocal ? IM_COL32(0, 255, 60, 255) : IM_COL32(0, 255, 200, 255);
-    ImU32 jointCol = IM_COL32(255, 50, 50, 255);
+    ImU32 boneCol = player.isLocal ? IM_COL32(100, 255, 100, 255) : IM_COL32(0, 255, 100, 255);
 
     if (player.boneCount >= 2) {
         std::array<Vec2, 32> screenJoints;
@@ -271,7 +270,6 @@ void DrawSkeleton(ImDrawList* drawList, const PlayerInfo& player, const Vec3& ca
             float d = 0.0f;
             if (WorldToScreen(player.liveBones[i].pos, camPos, camRot, screenW, screenH, activeFov, screenJoints[i], d)) {
                 valid[i] = true;
-                drawList->AddCircleFilled({ screenJoints[i].x, screenJoints[i].y }, 3.5f, jointCol);
 
                 if (g_showJointBadges) {
                     char badge[16];
@@ -365,6 +363,7 @@ void PatchMemory(HANDLE hProcess, uintptr_t address, const std::vector<BYTE>& by
     WriteProcessMemory(hProcess, (LPVOID)address, bytes.data(), bytes.size(), nullptr);
     VirtualProtectEx(hProcess, (LPVOID)address, bytes.size(), oldProtect, &oldProtect);
 }
+
 void AimbotWorkerThread() {
     float smoothedBobPitch = 0.0f;
     float smoothedBobYaw = 0.0f;
@@ -831,7 +830,6 @@ void MemoryWorkerThread() {
                                     curr = nextSib;
                                 }
 
-                                int boneIdx = 0;
                                 std::vector<std::pair<uintptr_t, int>> newCacheList;
 
                                 while (!nodeStack.empty() && pi.boneCount < 32) {
